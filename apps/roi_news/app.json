@@ -1,0 +1,49 @@
+{
+  "id": "roi_news",
+  "title": "Haber Özeti",
+  "description": "Türkiye gündeminden kısa haber başlıkları ve özetleri; ana ekran widget'ı ve çevrim dışı önbellek",
+  "version": "1.0.0",
+  "vendor": "roi-mgu-news",
+  "loggingId": "RNEWS",
+  "iconGlyph": "H",
+  "mguHmi": ["ID7"],
+  "internet": true,
+  "maxDiskUsage": 4194304,
+  "memoryKB": 98304,
+  "startWidget": {
+    "name": "Haber Özeti",
+    "layout": "LT_Table_OnlineApps_DriveRecorderWidget",
+    "image": "BackgroundImage1",
+    "scale": 1,
+    "size": [384, 256],
+    "safe": [0.08, 0.15],
+    "cells": {
+      "ErrorInfo": [false, "Bool"],
+      "background": [true, "Bool"],
+      "ProgressbarVisible": [false, "Bool"],
+      "TextRecordings": ["Güncel haberler", "Text"]
+    }
+  },
+  "screens": [
+    {
+      "name": "MAIN",
+      "kind": "canvas",
+      "title": "Haber Özeti",
+      "buttons": [
+        ["BTN_PREV", "Önceki haber"],
+        ["BTN_NEXT", "Sonraki haber"],
+        ["BTN_REFRESH", "Yenile"],
+        ["BTN_SETTINGS", "Ayarlar"]
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "key": "refreshMinutes",
+      "label": "Haberleri yenile",
+      "type": "choice",
+      "default": "30",
+      "options": [["15", "15 dakika"], ["30", "30 dakika"], ["60", "1 saat"]]
+    }
+  ]
+}
