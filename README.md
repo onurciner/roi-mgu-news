@@ -11,7 +11,7 @@ This is an RSS feed, so some publishers may not supply a full article summary. I
 ## Add it through MGU Store
 
 1. Publish this repository to your GitHub account.
-2. In the car's MGU Store, choose **Settings → Add source**, enter `owner/repo`, and follow the `main` branch.
+2. In the car's MGU Store, choose **Settings → Add source**, enter `onurciner/roi-mgu-news`, and follow the `main` branch.
 3. Install **Haber Özeti**. The Store builds the app on the head unit using the BMW SDK donor already present there.
 4. Open the iDrive home-screen widget chooser and add **Haber Özeti**. The widget is supplied in the app package; the Store install alone does not place it on the home screen.
 
