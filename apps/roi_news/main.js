@@ -13,11 +13,12 @@ const LIMIT = 20;
 function decode(value) {
     return String(value || '')
         .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-        .replace(/<[^>]*>/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
         .replace(/&#(\d+);/g, (m, n) => String.fromCharCode(Number(n)))
         .replace(/&#x([\da-f]+);/gi, (m, n) => String.fromCharCode(parseInt(n, 16)))
-        .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&apos;|&#39;/g, "'")
-        .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .replace(/&nbsp;/gi, ' ').replace(/&quot;/g, '"').replace(/&apos;|&#39;/g, "'")
+        .replace(/<[^>]*>/g, ' ')
         .replace(/\s+/g, ' ').trim();
 }
 
@@ -66,7 +67,7 @@ function requestFeed(done) {
         res.on('end', () => finish(null, parseFeed(body)));
         res.on('error', (e) => finish(e));
     });
-    req.setTimeout(12000, () => req.destroy(new Error('Feed request timed out')));
+    req.setTimeout(20000, () => req.destroy(new Error('Feed request timed out')));
     req.on('error', (e) => finish(e));
 }
 
@@ -86,6 +87,9 @@ mgu.run({
         let selected = 0;
         let updatedAt = 0;
         let retryAfter = 0;
+        let loading = false;
+        let requestPending = false;
+        let feedError = '';
         const smallWidgetText = Object.create(null);
         try {
             const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
@@ -97,16 +101,24 @@ mgu.run({
 
         function refresh(force) {
             const interval = Number(settings.get('refreshMinutes') || 30) * 60000;
-            if (!force && (Date.now() < retryAfter || Date.now() - updatedAt < interval)) return;
+            if (requestPending || (!force && (Date.now() < retryAfter || Date.now() - updatedAt < interval))) return;
+            requestPending = true;
+            loading = true;
+            feedError = '';
+            redraw();
             requestFeed((err, result) => {
+                requestPending = false;
+                loading = false;
                 if (err || !result || !result.length) {
                     retryAfter = Date.now() + 5 * 60000;
-                    log.warn('news feed: ' + (err ? err.message : 'no stories'));
+                    feedError = err ? err.message : 'feed returned no stories';
+                    log.warn('news feed: ' + feedError);
                     redraw();
                     return;
                 }
                 stories = result;
                 retryAfter = 0;
+                feedError = '';
                 selected = Math.min(selected, stories.length - 1);
                 updatedAt = Date.now();
                 try { fs.writeFileSync(cachePath, JSON.stringify({ updatedAt, stories })); }
@@ -127,7 +139,7 @@ mgu.run({
             const titleSize = tile ? 19 : 42;
             const lineH = tile ? 24 : 58;
             const maxLines = tile ? 3 : 2;
-            const title = story ? story.title : (updatedAt ? 'Haberler şu anda alınamıyor' : 'Haberler yükleniyor…');
+            const title = story ? story.title : (loading ? 'Haberler yükleniyor…' : 'Haberler alınamadı');
             let lines = [];
             const words = String(title).split(/\s+/), limitW = width - margin * 2;
             let line = '';
@@ -157,9 +169,22 @@ mgu.run({
                 });
                 if (current) descLines.push(current);
                 descLines.slice(0, tile ? 3 : 3).forEach((row, i) => cv.text(fit(cv, row, descSize, width - margin * 2), margin, startY + lines.length * lineH + (tile ? 9 : 26) + i * descLineH, descSize, dim));
+            } else if (!story) {
+                const message = loading
+                    ? 'Google News RSS kaynağına bağlanılıyor…'
+                    : (/ENOTFOUND|EAI_AGAIN|ENETUNREACH|ENETDOWN/i.test(feedError)
+                        ? 'İnternet yok. MGU Store bağlantısını kontrol edin.'
+                        : /timed out|timeout/i.test(feedError)
+                            ? 'Bağlantı zaman aşımına uğradı. Yenile’ye basın.'
+                            : /HTTP (\d+)/i.test(feedError)
+                                ? 'Haber kaynağı HTTP ' + (feedError.match(/HTTP (\d+)/i)[1]) + ' yanıtı verdi.'
+                                : 'Akış okunamadı. Bağlantıyı kontrol edip Yenile’ye basın.');
+                cv.text(fit(cv, message, tile ? 14 : 24, width - margin * 2), margin, startY + 58, tile ? 14 : 24, dim);
             }
             const footerY = height - (tile ? 14 : 20);
-            const byline = story ? [story.source, story.date ? new Date(story.date).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : ''].filter(Boolean).join(' · ') : 'Google News RSS · Türkçe';
+            const byline = story
+                ? [story.source, feedError ? 'çevrim dışı önbellek' : (story.date ? new Date(story.date).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '')].filter(Boolean).join(' · ')
+                : 'Google News RSS · Türkçe';
             cv.text(fit(cv, byline || 'Google News RSS · Türkçe', tile ? 11 : 19, width - margin * 2), margin, footerY, tile ? 11 : 19, dim);
             if (stories.length > 1) {
                 const count = (index + 1) + '/' + stories.length;
@@ -184,7 +209,7 @@ mgu.run({
                 if (!inst.visible) return null;
                 if (!inst.big) {
                     const story = stories.length ? stories[selected % stories.length] : null;
-                    const label = story ? story.title + (story.source ? ' · ' + story.source : '') : 'Haberler yükleniyor';
+                    const label = story ? story.title + (story.source ? ' · ' + story.source : '') : (loading ? 'Haberler yükleniyor' : 'Haber alınamadı · Yenile’ye basın');
                     if (smallWidgetText[inst.spawnId] !== label) {
                         smallWidgetText[inst.spawnId] = label;
                         widget.set(inst.spawnId, 'TextRecordings', label, 'Text');
