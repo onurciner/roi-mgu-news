@@ -8,6 +8,8 @@ The app first reads Google's public Turkish News RSS feed (`news.google.com/rss?
 
 This is an RSS feed, so some publishers may not supply a full article summary. In those cases the widget shows the headline and publisher, while the app screen shows the feed description when present.
 
+The canvas text atlases include Turkish characters, generated from the Ubuntu font family under the Ubuntu Font Licence. The source fonts, licence and atlas-generation script are in `kit/tools/font-source/` and `kit/tools/add_turkish_glyphs.py`; the licence is also bundled as `kit/runtime/fonts/UFL-Ubuntu.txt`.
+
 ## Add it through MGU Store
 
 1. Publish this repository to your GitHub account.
