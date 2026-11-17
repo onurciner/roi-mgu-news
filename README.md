@@ -4,7 +4,7 @@ An unofficial iDrive 7 app with a BMW home-screen `startWidget` that shows Turki
 
 ## News source
 
-The app reads Google's public Turkish News RSS feed (`news.google.com/rss?hl=tr&gl=TR&ceid=TR:tr`). It is free and does not need an API key. The feed provides publisher headlines, links, dates and descriptions where available. The app keeps the latest successful response in its app data folder and shows that cache when the car has no internet connection. Refresh defaults to every 30 minutes and can be changed in the app's settings.
+The app first reads Google's public Turkish News RSS feed (`news.google.com/rss?hl=tr&gl=TR&ceid=TR:tr`), then falls back to TRT Haber’s official headlines RSS (`trthaber.com/manset_articles.rss`) if Google is unavailable or returns no stories. Both feeds are free and need no API key. Each feed request has a 10-second timeout, so a full fallback attempt can take up to about 20 seconds. The feeds provide headlines, links, dates and descriptions where available. The app keeps the latest successful response in its app data folder and shows that cache when the car has no internet connection. Refresh defaults to every 30 minutes and can be changed in the app's settings.
 
 This is an RSS feed, so some publishers may not supply a full article summary. In those cases the widget shows the headline and publisher, while the app screen shows the feed description when present.
 

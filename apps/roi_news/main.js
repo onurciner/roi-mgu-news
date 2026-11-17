@@ -6,9 +6,13 @@ const https = require('https');
 const mgu = require('./kit/mgu');
 const { ScaledCanvas } = require('./kit/canvas');
 
-const FEED = 'https://news.google.com/rss?hl=tr&gl=TR&ceid=TR:tr';
+const FEEDS = [
+    { url: 'https://news.google.com/rss?hl=tr&gl=TR&ceid=TR:tr', source: 'Google News' },
+    { url: 'https://www.trthaber.com/manset_articles.rss', source: 'TRT Haber' }
+];
 const CACHE_FILE = 'news-cache.json';
 const LIMIT = 20;
+const REQUEST_TIMEOUT = 10000;
 
 function decode(value) {
     return String(value || '')
@@ -45,30 +49,69 @@ function parseFeed(xml) {
     return items;
 }
 
+function requestOneFeed(feed, done) {
+    let finished = false, activeRequest = null, redirects = 0;
+    const finish = (err, data) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        done(err, data);
+    };
+    const timer = setTimeout(() => {
+        if (activeRequest) activeRequest.destroy();
+        finish(new Error(feed.source + ' request timed out after 10 seconds'));
+    }, REQUEST_TIMEOUT);
+
+    function get(url) {
+        activeRequest = https.get(url, { headers: { 'User-Agent': 'roi-mgu-news/1.0 (BMW iDrive 7)' } }, (res) => {
+            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                res.resume();
+                if (++redirects > 3) return finish(new Error(feed.source + ' has too many redirects'));
+                let next;
+                try { next = new URL(res.headers.location, url); }
+                catch (e) { return finish(new Error(feed.source + ' returned an invalid redirect')); }
+                if (next.protocol !== 'https:') return finish(new Error(feed.source + ' redirected to a non-HTTPS URL'));
+                return get(next);
+            }
+            if (res.statusCode < 200 || res.statusCode >= 300) {
+                res.resume();
+                return finish(new Error(feed.source + ' HTTP ' + res.statusCode));
+            }
+            let body = '';
+            res.setEncoding('utf8');
+            res.on('data', (chunk) => {
+                body += chunk;
+                if (body.length > 1500000) {
+                    res.destroy();
+                    finish(new Error(feed.source + ' feed is too large'));
+                }
+            });
+            res.on('end', () => {
+                if (finished) return;
+                const items = parseFeed(body);
+                if (!items.length) return finish(new Error(feed.source + ' feed returned no stories'));
+                items.forEach((item) => { if (!item.source) item.source = feed.source; });
+                finish(null, items);
+            });
+            res.on('error', (e) => finish(e));
+        });
+        activeRequest.on('error', (e) => finish(new Error(feed.source + ': ' + e.message)));
+    }
+    get(new URL(feed.url));
+}
+
 function requestFeed(done) {
-    let finished = false;
-    const finish = (err, data) => { if (finished) return; finished = true; done(err, data); };
-    const req = https.get(FEED, { headers: { 'User-Agent': 'roi-mgu-news/1.0 (BMW iDrive 7)' } }, (res) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-            res.resume();
-            https.get(res.headers.location, { headers: { 'User-Agent': 'roi-mgu-news/1.0' } }, (next) => {
-                let body = '';
-                next.setEncoding('utf8');
-                next.on('data', (chunk) => { body += chunk; if (body.length > 1500000) next.destroy(new Error('Feed is too large')); });
-                next.on('end', () => finish(null, parseFeed(body)));
-                next.on('error', (e) => finish(e));
-            }).on('error', (e) => finish(e));
-            return;
-        }
-        if (res.statusCode < 200 || res.statusCode >= 300) { res.resume(); return finish(new Error('Feed HTTP ' + res.statusCode)); }
-        let body = '';
-        res.setEncoding('utf8');
-        res.on('data', (chunk) => { body += chunk; if (body.length > 1500000) req.destroy(new Error('Feed is too large')); });
-        res.on('end', () => finish(null, parseFeed(body)));
-        res.on('error', (e) => finish(e));
-    });
-    req.setTimeout(20000, () => req.destroy(new Error('Feed request timed out')));
-    req.on('error', (e) => finish(e));
+    let index = 0, lastError = null;
+    function tryNext() {
+        if (index >= FEEDS.length) return done(new Error(lastError ? lastError.message : 'All news feeds failed'));
+        const feed = FEEDS[index++];
+        requestOneFeed(feed, (err, items) => {
+            if (!err && items && items.length) return done(null, items);
+            lastError = err || new Error(feed.source + ' returned no stories');
+            tryNext();
+        });
+    }
+    tryNext();
 }
 
 function fit(cv, value, size, width) {
